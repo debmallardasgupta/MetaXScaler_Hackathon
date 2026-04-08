@@ -1,0 +1,100 @@
+name: email-triage-env
+version: "1.0.0"
+description: >
+  Real-world email triage environment for agent benchmarking.
+  Agents read incoming emails and must classify urgency, route to the
+  correct department, or perform full triage (priority + routing + response).
+  Three tasks of increasing difficulty with deterministic graders and
+  partial-credit reward signals.
+
+author: email-triage-openenv
+tags:
+  - openenv
+  - email
+  - triage
+  - nlp
+  - classification
+  - real-world
+
+observation_space:
+  type: text
+  description: >
+    Email content plus task instructions. On reset, contains the first email.
+    After each step, contains the next email or a terminal summary.
+  field: echoed_message
+  dtype: string
+
+action_space:
+  type: text
+  description: >
+    Agent's triage response. Exact format depends on the active task:
+    URGENT/NOT_URGENT for email_urgent; department name for email_route;
+    structured text with priority, department, and reply for email_triage.
+  field: message
+  dtype: string
+
+reward:
+  range: [-0.1, 1.0]
+  description: >
+    Per-step reward based on triage quality.
+    -0.1 for empty/null responses (penalty).
+     0.0 for incorrect classification or routing.
+     0.5 for partially correct routing (close department).
+     1.0 for fully correct classification or routing.
+    For email_triage, partial credit is given per correct component
+    (priority 0.40 + department 0.35 + response quality 0.25).
+
+tasks:
+  - name: email_urgent
+    difficulty: easy
+    description: >
+      Classify each of 5 emails as URGENT or NOT_URGENT.
+      Correct → 1.0. Incorrect → 0.0.
+      Max episode reward: 5.0.
+    num_emails: 5
+    max_steps: 8
+    reward_range: [0.0, 1.0]
+    success_threshold: 0.1
+
+  - name: email_route
+    difficulty: medium
+    description: >
+      Route each of 5 emails to the correct department
+      (BILLING, TECH_SUPPORT, SALES, GENERAL).
+      Exact match → 1.0. Near match → 0.5. Wrong → 0.0.
+      Max episode reward: 5.0.
+    num_emails: 5
+    max_steps: 8
+    reward_range: [0.0, 1.0]
+    success_threshold: 0.1
+
+  - name: email_triage
+    difficulty: hard
+    description: >
+      Full triage of 3 emails: assign priority (P1/P2/P3),
+      route to department, and draft a brief response.
+      Partial credit per correct component (up to 1.0 per email).
+      Max episode reward: 3.0.
+    num_emails: 3
+    max_steps: 8
+    reward_range: [0.0, 1.0]
+    success_threshold: 0.1
+
+endpoints:
+  reset: POST /reset
+  step:  POST /step
+  state: GET  /state
+  health: GET /health
+
+interface:
+  reset_body: "{}"
+  step_body: '{ "message": "<agent response>" }'
+  reset_response_fields:
+    - observation.echoed_message
+    - reward
+    - done
+  step_response_fields:
+    - observation.echoed_message
+    - reward
+    - done
+    - info
